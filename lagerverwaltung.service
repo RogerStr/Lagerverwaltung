@@ -1,0 +1,19 @@
+[Unit]
+Description=Lagerverwaltung (Go + SQLite)
+After=network.target
+
+[Service]
+# Benutzer, unter dem der Dienst läuft (z. B. pi)
+User=pi
+# Pfad zum Programmordner (enthält das Binary und public/)
+WorkingDirectory=/home/pi/lagerverwaltung
+# Pfad zum kompilierten Binary
+ExecStart=/home/pi/lagerverwaltung/lagerverwaltung
+Restart=on-failure
+# Port (80 = Zugriff ohne :3000 in der URL)
+Environment=PORT=80
+# Damit der unprivilegierte Dienst Port 80 nutzen darf:
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

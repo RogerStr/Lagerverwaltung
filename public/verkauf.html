@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neuer Verkauf – Lagerverwaltung</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav id="nav" class="topnav"></nav>
+
+<main>
+  <div class="pagehead">
+    <h1 id="titel">🧾 Neuer Verkauf</h1>
+    <div class="toolbar">
+      <span class="muted" id="saveState" style="font-size:13px"></span>
+      <button class="secondary small" onclick="neuerVerkauf()">Neu</button>
+      <button class="green" id="abschlussBtn" onclick="abschliessen()">✓ Verkauf abschliessen</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:20px;margin-bottom:18px">
+    <div class="form-grid">
+      <div class="field">
+        <label>Empfänger *</label>
+        <select id="kundeSel" onchange="onKopf()"></select>
+        <div class="adr-box muted" id="kundeBox" style="margin-top:6px"></div>
+      </div>
+      <div class="field">
+        <label>Verkäufer (Absender)</label>
+        <div id="verkWrap"><select id="verkSel" onchange="onKopf()" style="width:100%"></select></div>
+        <div class="adr-box muted" id="verkBox" style="margin-top:6px"></div>
+      </div>
+      <div class="field full"><label>Notiz (erscheint auf der Rechnung)</label><textarea id="notiz" rows="2" oninput="onKopf()"></textarea></div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:20px">
+    <div class="pagehead" style="margin-bottom:12px">
+      <h2 style="margin:0;font-size:17px">Positionen</h2>
+      <button class="secondary small" onclick="addPos()">+ Position</button>
+    </div>
+    <table class="pos-table">
+      <thead><tr>
+        <th style="width:34%">Artikel</th>
+        <th>Bezeichnung</th>
+        <th class="num" style="width:90px">Menge</th>
+        <th class="num" style="width:110px">VK (CHF)</th>
+        <th class="num" style="width:110px">Summe</th>
+        <th style="width:1%"></th>
+      </tr></thead>
+      <tbody id="posBody"></tbody>
+    </table>
+    <div id="posEmpty" class="empty" style="display:none">Noch keine Positionen. Klicke auf „+ Position".</div>
+    <div class="summe-zeile">Gesamtbetrag: <span class="gross" id="gesamt">0.00 CHF</span></div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+renderNav('verkauf');
+
+let verkaufId = null;
+let artikelListe = [], kunden = [], verkaeufer = [];
+let positionen = [];      // {artikel_id, bezeichnung, artikelnummer, menge, vk_preis}
+let saveTimer = null, dirty = false;
+let reserviertAndere = {}; // artikelId -> in ANDEREN offenen Verkäufen blockierte Menge
+let eigenSnapshot = [];    // beim Laden gespeicherte Positionen dieses Entwurfs
+
+async function init() {
+  try {
+    [artikelListe, kunden, verkaeufer] = await Promise.all([
+      api('/artikel'), api('/adressen?typ=kunde'), api('/adressen?typ=verkaeufer'),
+    ]);
+    setStatus(true);
+  } catch (e) { setStatus(false); toast('⚠ Server nicht erreichbar', true); return; }
+
+  fuelleKopfSelects();
+
+  const id = new URLSearchParams(location.search).get('id');
+  if (id) await ladeVerkauf(parseInt(id));
+  else { eigenSnapshot = []; berechneReserviertAndere(); if (!positionen.length) addPos(); render(); }
+  renderAdrPreview();
+}
+
+// Wieviel ist in ANDEREN offenen Verkäufen blockiert? (global reserviert minus eigener Anteil)
+function berechneReserviertAndere() {
+  reserviertAndere = {};
+  for (const a of artikelListe) reserviertAndere[a.id] = a.reserviert || 0;
+  for (const p of eigenSnapshot) {
+    if (p.artikel_id) reserviertAndere[p.artikel_id] = Math.max(0, (reserviertAndere[p.artikel_id] || 0) - p.menge);
+  }
+}
+
+function fuelleKopfSelects() {
+  const opt = a => `<option value="${a.id}">${esc(a.firma ? a.firma + ' – ' + a.name : a.name)}</option>`;
+  document.getElementById('kundeSel').innerHTML = '<option value="">— Empfänger wählen —</option>' + kunden.map(opt).join('');
+
+  const sel = document.getElementById('verkSel');
+  const wrap = document.getElementById('verkWrap');
+  if (verkaeufer.length > 1) {
+    // mehrere Adressen → Auswahl anzeigen, Standard vorauswählen
+    const std = verkaeufer.find(a => a.ist_standard) || verkaeufer[0];
+    sel.innerHTML = verkaeufer.map(a => `<option value="${a.id}" ${a.id === std.id ? 'selected' : ''}>${esc(a.firma || a.name)}${a.ist_standard ? ' (Standard)' : ''}</option>`).join('');
+    wrap.style.display = '';
+  } else if (verkaeufer.length === 1) {
+    // genau eine Adresse → automatisch übernehmen, Auswahl ausblenden
+    sel.innerHTML = `<option value="${verkaeufer[0].id}" selected></option>`;
+    wrap.style.display = 'none';
+  } else {
+    sel.innerHTML = '<option value=""></option>';
+    wrap.style.display = 'none';
+  }
+}
+
+async function ladeVerkauf(id) {
+  try {
+    const v = await api('/verkaeufe/' + id);
+    if (v.status !== 'offen') { toast('Dieser Verkauf ist bereits abgeschlossen.', true); setTimeout(() => location.href = 'verkaeufe.html', 1200); return; }
+    verkaufId = v.id;
+    document.getElementById('titel').textContent = '🧾 Verkauf-Entwurf bearbeiten';
+    document.getElementById('kundeSel').value = v.kunde_id || '';
+    // nur überschreiben, wenn explizit gespeichert – sonst Standard-Vorauswahl behalten
+    if (v.verkaeufer_id) document.getElementById('verkSel').value = v.verkaeufer_id;
+    document.getElementById('notiz').value = v.notiz || '';
+    positionen = v.positionen.map(p => ({
+      artikel_id: p.artikel_id, bezeichnung: p.bezeichnung, artikelnummer: p.artikelnummer,
+      menge: p.menge, vk_preis: p.vk_preis,
+    }));
+    eigenSnapshot = positionen.map(p => ({ artikel_id: p.artikel_id, menge: p.menge }));
+    berechneReserviertAndere();
+    if (!positionen.length) addPos();
+    render();
+  } catch (e) { toast('⚠ ' + e.message, true); }
+}
+
+// ---------- Kopf ----------
+function adrText(a) {
+  if (!a) return '';
+  return [a.firma, a.name, a.strasse, [a.plz, a.ort].filter(Boolean).join(' '), a.land].filter(Boolean).join('\n');
+}
+function renderAdrPreview() {
+  const k = kunden.find(x => x.id == document.getElementById('kundeSel').value);
+  const v = verkaeufer.find(x => x.id == document.getElementById('verkSel').value);
+  document.getElementById('kundeBox').textContent = adrText(k);
+  document.getElementById('verkBox').textContent = adrText(v)
+    || (verkaeufer.length === 0 ? 'Keine Verkäufer-Adresse – unter „Adressen" anlegen.' : '');
+}
+function onKopf() { renderAdrPreview(); scheduleSave(); }
+
+// ---------- Positionen ----------
+function render() {
+  const body = document.getElementById('posBody');
+  body.innerHTML = positionen.map((p, i) => {
+    const opts = '<option value="">— frei —</option>' + artikelListe.map(a =>
+      `<option value="${a.id}" ${p.artikel_id == a.id ? 'selected' : ''}>${esc(a.bezeichnung)} (Bestand: ${a.menge})</option>`).join('');
+    return `<tr>
+      <td><select onchange="onArtikel(${i}, this)">${opts}</select></td>
+      <td><input type="text" id="pb_${i}" value="${esc(p.bezeichnung)}" oninput="onInput(${i})" placeholder="Bezeichnung"></td>
+      <td class="num"><input type="number" id="pm_${i}" value="${p.menge}" min="0" step="1" ${isFinite(verfuegbar(i)) ? `max="${verfuegbar(i)}"` : ''} oninput="onInput(${i})"></td>
+      <td class="num"><input type="number" id="pv_${i}" value="${p.vk_preis}" min="0" step="0.01" oninput="onInput(${i})"></td>
+      <td class="num" id="ps_${i}">${fmtCHF(p.menge * p.vk_preis)}</td>
+      <td><button class="gray small" onclick="removePos(${i})" title="Entfernen">🗑</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('posEmpty').style.display = positionen.length ? 'none' : 'block';
+  updateGesamt();
+}
+
+function addPos() { positionen.push({ artikel_id: null, bezeichnung: '', artikelnummer: null, menge: 1, vk_preis: 0 }); render(); scheduleSave(); }
+function removePos(i) { positionen.splice(i, 1); render(); scheduleSave(); }
+
+// Noch verfügbarer Bestand für Position i: Lagerbestand minus die in ANDEREN offenen
+// Verkäufen blockierte Menge minus die übrigen Positionen desselben Artikels in diesem
+// Entwurf. Freie Positionen (ohne Artikel) sind unbegrenzt.
+function verfuegbar(i) {
+  const p = positionen[i];
+  if (!p || !p.artikel_id) return Infinity;
+  const a = artikelListe.find(x => x.id == p.artikel_id);
+  if (!a) return Infinity;
+  const imEditor = positionen.reduce((s, q, j) => (j !== i && q.artikel_id == p.artikel_id ? s + (q.menge || 0) : s), 0);
+  return Math.max(0, a.menge - (reserviertAndere[p.artikel_id] || 0) - imEditor);
+}
+
+// Menge auf den verfügbaren Bestand begrenzen
+function clampMenge(i, meldung) {
+  const max = verfuegbar(i);
+  if (positionen[i].menge > max) {
+    positionen[i].menge = max;
+    const inp = document.getElementById('pm_' + i);
+    if (inp) inp.value = max;
+    if (meldung) toast(`⚠ „${positionen[i].bezeichnung || 'Position'}": nur ${max} Stück auf Lager`, true);
+  }
+  const inp = document.getElementById('pm_' + i);
+  if (inp) { if (isFinite(max)) inp.max = max; else inp.removeAttribute('max'); }
+}
+
+function onArtikel(i, sel) {
+  const a = artikelListe.find(x => x.id == sel.value);
+  positionen[i].artikel_id = a ? a.id : null;
+  if (a) {
+    positionen[i].bezeichnung = a.bezeichnung;
+    positionen[i].artikelnummer = a.artikelnummer;
+    positionen[i].vk_preis = a.vk_preis || 0;
+    document.getElementById('pb_' + i).value = a.bezeichnung;
+    document.getElementById('pv_' + i).value = a.vk_preis || 0;
+  }
+  clampMenge(i, true);
+  updateZeile(i);
+  scheduleSave();
+}
+
+function onInput(i) {
+  positionen[i].bezeichnung = document.getElementById('pb_' + i).value;
+  positionen[i].menge = parseInt(document.getElementById('pm_' + i).value) || 0;
+  positionen[i].vk_preis = parseFloat(document.getElementById('pv_' + i).value) || 0;
+  clampMenge(i, true);
+  updateZeile(i);
+  scheduleSave();
+}
+
+function updateZeile(i) {
+  document.getElementById('ps_' + i).textContent = fmtCHF(positionen[i].menge * positionen[i].vk_preis);
+  updateGesamt();
+}
+function updateGesamt() {
+  const g = positionen.reduce((s, p) => s + p.menge * p.vk_preis, 0);
+  document.getElementById('gesamt').textContent = fmtCHF(g);
+}
+
+// ---------- Entwurf automatisch speichern ----------
+function istLeer() {
+  const kunde = document.getElementById('kundeSel').value;
+  const hatPos = positionen.some(p => p.bezeichnung.trim() || p.artikel_id);
+  return !kunde && !hatPos && !document.getElementById('notiz').value.trim();
+}
+function scheduleSave() {
+  dirty = true;
+  document.getElementById('saveState').textContent = '…';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDraft, 800);
+}
+function bodyJetzt() {
+  return {
+    kunde_id: document.getElementById('kundeSel').value || null,
+    verkaeufer_id: document.getElementById('verkSel').value || null,
+    notiz: document.getElementById('notiz').value,
+    positionen: positionen.filter(p => p.bezeichnung.trim() || p.artikel_id),
+  };
+}
+async function saveDraft() {
+  clearTimeout(saveTimer);
+  if (!dirty) return true;
+  if (istLeer() && !verkaufId) { document.getElementById('saveState').textContent = ''; return true; }
+  try {
+    const body = bodyJetzt();
+    if (verkaufId) {
+      await api('/verkaeufe/' + verkaufId, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      const v = await api('/verkaeufe', { method: 'POST', body: JSON.stringify(body) });
+      verkaufId = v.id;
+      history.replaceState(null, '', '?id=' + verkaufId);
+      document.getElementById('titel').textContent = '🧾 Verkauf-Entwurf bearbeiten';
+    }
+    dirty = false;
+    document.getElementById('saveState').textContent = '✔ Entwurf gespeichert';
+    return true;
+  } catch (e) { document.getElementById('saveState').textContent = '⚠ nicht gespeichert'; toast('⚠ ' + e.message, true); return false; }
+}
+
+// Vor dem Verlassen der Seite noch ausstehende Änderungen sichern
+window.addEventListener('beforeunload', () => {
+  if (dirty && verkaufId && !istLeer()) {
+    navigator.sendBeacon('/api/verkaeufe/' + verkaufId, new Blob([JSON.stringify(bodyJetzt())], { type: 'application/json' }));
+  }
+});
+
+// ---------- Abschluss ----------
+async function abschliessen() {
+  const kunde = document.getElementById('kundeSel').value;
+  if (!kunde) { toast('⚠ Bitte einen Empfänger wählen', true); return; }
+  const gueltige = positionen.filter(p => (p.bezeichnung.trim() || p.artikel_id) && p.menge > 0);
+  if (!gueltige.length) { toast('⚠ Mindestens eine Position mit Menge > 0 nötig', true); return; }
+  if (!confirm('Verkauf abschliessen?\nDer Lagerbestand wird abgebucht und eine Rechnung (PDF) erstellt.\nDanach ist keine Änderung mehr möglich.')) return;
+
+  const btn = document.getElementById('abschlussBtn');
+  btn.disabled = true;
+  try {
+    if (!(await saveDraft())) { btn.disabled = false; return; }
+    const v = await api('/verkaeufe/' + verkaufId + '/abschluss', { method: 'POST' });
+    toast(`✔ Verkauf ${v.nummer} abgeschlossen`);
+    if (v.hat_pdf) window.open('/api/verkaeufe/' + verkaufId + '/pdf', '_blank');
+    setTimeout(() => location.href = 'verkaeufe.html', 900);
+  } catch (e) {
+    btn.disabled = false;
+    toast('⚠ ' + e.message, true);
+  }
+}
+
+function neuerVerkauf() {
+  if (dirty && !istLeer()) saveDraft();
+  location.href = 'verkauf.html';
+}
+
+init();
+</script>
+</body>
+</html>

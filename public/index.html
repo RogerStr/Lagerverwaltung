@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lager – Lagerverwaltung</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav id="nav" class="topnav"></nav>
+
+<main>
+  <div class="pagehead">
+    <h1>📦 Lager</h1>
+    <div class="toolbar">
+      <button class="green" onclick="openArtikelModal()">+ Neuer Artikel</button>
+      <button class="secondary small" onclick="exportCSV()">⬇ CSV</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="searchbar">
+    <input type="text" id="search" placeholder="🔍 Suche nach Bezeichnung, Nummer, Lagerort, Kategorie…" oninput="render()">
+    <select id="kategorieFilter" onchange="render()"><option value="">Alle Kategorien</option></select>
+    <label class="muted" style="display:flex;align-items:center;gap:6px;font-size:14px;">
+      <input type="checkbox" id="lowOnly" onchange="render()" style="width:auto"> nur Mangelbestand
+    </label>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Bild</th>
+          <th class="sortable" onclick="sortBy('bezeichnung')">Bezeichnung</th>
+          <th class="sortable" onclick="sortBy('artikelnummer')">Art.-Nr.</th>
+          <th class="sortable" onclick="sortBy('kategorie')">Kategorie</th>
+          <th class="sortable" onclick="sortBy('lagerort')">Lagerort</th>
+          <th class="sortable num" onclick="sortBy('menge')">Menge</th>
+          <th class="sortable num" onclick="sortBy('reserviert')">Blockiert</th>
+          <th class="num">Verfügbar</th>
+          <th class="sortable num" onclick="sortBy('mindestbestand')">Min.</th>
+          <th class="sortable num" onclick="sortBy('ek_preis')">EK</th>
+          <th class="sortable num" onclick="sortBy('vk_preis')">VK</th>
+          <th>Status</th>
+          <th>Aktionen</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="emptyState" class="empty" style="display:none">Noch keine Artikel erfasst. Klicke auf „+ Neuer Artikel".</div>
+  </div>
+</main>
+
+<!-- Artikel-Modal -->
+<div class="modal-backdrop" id="artikelModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="artikelModalTitle">Neuer Artikel</h2>
+      <button class="close-x" onclick="closeModal('artikelModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="f_id">
+      <div class="form-grid">
+        <div class="field full"><label>Bezeichnung *</label><input type="text" id="f_bezeichnung" placeholder="z.B. Sechskantschraube M6x20"></div>
+        <div class="field"><label>Artikelnummer / SKU</label><input type="text" id="f_artikelnummer" placeholder="z.B. A-1024"></div>
+        <div class="field"><label>Kategorie</label><input type="text" id="f_kategorie" list="kategorieList" placeholder="z.B. Schrauben"><datalist id="kategorieList"></datalist></div>
+        <div class="field"><label>Menge / Bestand</label><input type="number" id="f_menge" value="0" min="0" step="1"></div>
+        <div class="field"><label>Lagerort / Fach</label><input type="text" id="f_lagerort" placeholder="z.B. Regal B / Fach 3"></div>
+        <div class="field"><label>Mindestbestand</label><input type="number" id="f_mindestbestand" value="0" min="0" step="1"></div>
+        <div class="field"><label>Einkaufspreis EK (CHF)</label><input type="number" id="f_ek_preis" value="" min="0" step="0.01" placeholder="0.00"></div>
+        <div class="field"><label>Verkaufspreis VK (CHF)</label><input type="number" id="f_vk_preis" value="" min="0" step="0.01" placeholder="0.00"></div>
+        <div class="field full"><label>Bemerkung</label><textarea id="f_bemerkung" rows="2" placeholder="Optionale Notiz…"></textarea></div>
+        <div class="field full">
+          <label>Bilder <span class="muted" style="font-weight:400">(werden automatisch verkleinert)</span></label>
+          <div class="bild-galerie" id="f_bilder"></div>
+          <input type="file" id="f_bild_input" accept="image/*" multiple style="display:none">
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="gray" onclick="closeModal('artikelModal')">Abbrechen</button>
+      <button class="green" onclick="saveArtikel()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Buchungs-Modal -->
+<div class="modal-backdrop" id="buchModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="buchModalTitle">Buchung</h2>
+      <button class="close-x" onclick="closeModal('buchModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="b_id">
+      <input type="hidden" id="b_typ">
+      <p style="margin-top:0">Artikel: <strong id="b_name"></strong><br>
+         <span class="muted">Aktueller Bestand: <strong id="b_aktuell"></strong></span></p>
+      <div class="field"><label id="b_label">Menge</label><input type="number" id="b_menge" class="big-qty" value="1" min="1" step="1"></div>
+      <div class="field" style="margin-top:12px"><label>Notiz (optional)</label><input type="text" id="b_notiz" placeholder="z.B. Lieferung / Auftrag Nr."></div>
+    </div>
+    <div class="modal-foot">
+      <button class="gray" onclick="closeModal('buchModal')">Abbrechen</button>
+      <button id="b_save" onclick="saveBuchung()">Buchen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Historie-Modal -->
+<div class="modal-backdrop" id="histModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Bewegungs-Historie</h2>
+      <button class="close-x" onclick="closeModal('histModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-top:0"><strong id="h_name"></strong></p>
+      <div class="card" style="max-height:340px;overflow-y:auto">
+        <table class="hist-table">
+          <thead><tr><th>Datum</th><th>Typ</th><th class="num">Menge</th><th>Notiz</th></tr></thead>
+          <tbody id="h_body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="gray" onclick="closeModal('histModal')">Schliessen</button></div>
+  </div>
+</div>
+
+<!-- Bild-Großansicht -->
+<div class="modal-backdrop" id="bildModal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head">
+      <h2 id="bildModalTitle">Bild</h2>
+      <button class="close-x" onclick="closeModal('bildModal')">×</button>
+    </div>
+    <div class="modal-body" style="text-align:center">
+      <div style="display:flex;align-items:center;gap:10px;justify-content:center">
+        <button class="lb-nav" id="lbPrev" onclick="lightboxNav(-1)">‹</button>
+        <img id="bildModalImg" alt="Artikelbild" style="max-width:100%;max-height:70vh;border-radius:8px;flex:1">
+        <button class="lb-nav" id="lbNext" onclick="lightboxNav(1)">›</button>
+      </div>
+      <div class="muted" id="lbCounter" style="margin-top:10px;font-size:13px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- QR-Code-Modal -->
+<div class="modal-backdrop" id="qrModal">
+  <div class="modal" style="max-width:340px">
+    <div class="modal-head">
+      <h2>QR-Code</h2>
+      <button class="close-x" onclick="closeModal('qrModal')">×</button>
+    </div>
+    <div class="modal-body" style="text-align:center">
+      <img id="qrImg" alt="QR-Code" style="width:240px;height:240px;image-rendering:pixelated">
+      <div id="qrLabel" style="margin-top:10px;font-weight:600"></div>
+      <div id="qrSub" class="muted" style="font-size:13px"></div>
+      <div class="muted" style="font-size:12px;margin-top:8px">Inhalt: Bezeichnung + Artikel-Nr.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="gray" onclick="closeModal('qrModal')">Schliessen</button>
+      <button class="green" onclick="printQR()">🖨 Drucken</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+/* Seite: Lager (Artikel) */
+let artikelCache = [];
+let sortKey = 'bezeichnung', sortDir = 1;
+let bildVorhanden = [], bildNeu = [], bildEntfernen = [];
+
+renderNav('lager');
+
+async function ladeArtikel() {
+  try {
+    artikelCache = await api('/artikel');
+    setStatus(true);
+    render();
+  } catch (e) {
+    setStatus(false);
+    toast('⚠ Server nicht erreichbar – läuft das Programm?', true);
+  }
+}
+
+// ---------- Rendering ----------
+function render() {
+  const all = artikelCache;
+  const term = document.getElementById('search').value.toLowerCase().trim();
+  const katFilter = document.getElementById('kategorieFilter').value;
+  const lowOnly = document.getElementById('lowOnly').checked;
+
+  const kategorien = [...new Set(all.map(a => a.kategorie).filter(Boolean))].sort();
+  const kf = document.getElementById('kategorieFilter');
+  const cur = kf.value;
+  kf.innerHTML = '<option value="">Alle Kategorien</option>' + kategorien.map(k => `<option ${k === cur ? 'selected' : ''}>${esc(k)}</option>`).join('');
+  document.getElementById('kategorieList').innerHTML = kategorien.map(k => `<option value="${esc(k)}">`).join('');
+
+  let rows = all.filter(a => {
+    if (katFilter && a.kategorie !== katFilter) return false;
+    if (lowOnly && !(a.menge <= a.mindestbestand && a.mindestbestand > 0)) return false;
+    if (term) {
+      const hay = [a.bezeichnung, a.artikelnummer, a.lagerort, a.kategorie, a.bemerkung].join(' ').toLowerCase();
+      if (!hay.includes(term)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    let x = a[sortKey], y = b[sortKey];
+    if (typeof x === 'string') x = x.toLowerCase();
+    if (typeof y === 'string') y = y.toLowerCase();
+    if (x == null) x = ''; if (y == null) y = '';
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = rows.map(a => {
+    const leer = a.menge <= 0;
+    const low = a.mindestbestand > 0 && a.menge <= a.mindestbestand;
+    const statusBadge = leer ? '<span class="badge leer">Leer</span>'
+      : low ? '<span class="badge low">Mangel</span>'
+      : '<span class="badge ok">OK</span>';
+    const bild = a.bild_anzahl > 0
+      ? `<span class="thumb-wrap"><img class="thumb" src="/api/bilder/${a.bild_first}" alt="" loading="lazy" onclick="openBild(${a.id})">${a.bild_anzahl > 1 ? `<span class="thumb-badge">${a.bild_anzahl}</span>` : ''}</span>`
+      : '<span class="thumb-empty">📦</span>';
+    const reserviert = a.reserviert || 0;
+    const frei = a.menge - reserviert;
+    return `<tr class="${(leer || low) ? 'row-low' : ''}">
+      <td>${bild}</td>
+      <td><strong>${esc(a.bezeichnung)}</strong>${a.bemerkung ? `<br><span class="muted" style="font-size:12px">${esc(a.bemerkung)}</span>` : ''}</td>
+      <td>${esc(a.artikelnummer) || '–'}</td>
+      <td>${esc(a.kategorie) || '–'}</td>
+      <td>${esc(a.lagerort) || '–'}</td>
+      <td class="num"><strong>${a.menge}</strong></td>
+      <td class="num">${reserviert > 0 ? `<span style="color:var(--amber)">${reserviert}</span>` : '<span class="muted">–</span>'}</td>
+      <td class="num"><strong style="color:${frei <= 0 ? 'var(--red)' : 'inherit'}">${frei}</strong></td>
+      <td class="num muted">${a.mindestbestand || '–'}</td>
+      <td class="num">${fmtPreis(a.ek_preis)}</td>
+      <td class="num">${fmtPreis(a.vk_preis)}</td>
+      <td>${statusBadge}</td>
+      <td><div class="actions-cell">
+        <button class="green small" title="Einbuchen" onclick="openBuchModal(${a.id},'ein')">+</button>
+        <button class="red small" title="Abbuchen" onclick="openBuchModal(${a.id},'aus')">−</button>
+        <button class="gray small" title="Historie" onclick="openHist(${a.id})">🕑</button>
+        <button class="gray small" title="QR-Code" onclick="openQR(${a.id})">▦</button>
+        <button class="secondary small" title="Bearbeiten" onclick="openArtikelModal(${a.id})">✎</button>
+        <button class="gray small" title="Löschen" onclick="deleteArtikel(${a.id})">🗑</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('emptyState').style.display = all.length === 0 ? 'block' : 'none';
+
+  const gesamtTeile = all.reduce((s, a) => s + a.menge, 0);
+  const blockiert = all.reduce((s, a) => s + (a.reserviert || 0), 0);
+  const wertEK = all.reduce((s, a) => s + a.menge * (a.ek_preis || 0), 0);
+  const wertVK = all.reduce((s, a) => s + a.menge * (a.vk_preis || 0), 0);
+  const mangel = all.filter(a => a.menge <= 0 || (a.mindestbestand > 0 && a.menge <= a.mindestbestand)).length;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="label">Artikel</div><div class="value">${all.length}</div></div>
+    <div class="stat"><div class="label">Teile gesamt</div><div class="value">${gesamtTeile}</div></div>
+    <div class="stat"><div class="label">Blockiert (offene Verkäufe)</div><div class="value" style="color:${blockiert ? 'var(--amber)' : 'var(--muted)'}">${blockiert}</div></div>
+    <div class="stat"><div class="label">Lagerwert (EK)</div><div class="value">${wertEK.toFixed(2)} <span style="font-size:14px" class="muted">CHF</span></div></div>
+    <div class="stat"><div class="label">Verkaufswert (VK)</div><div class="value">${wertVK.toFixed(2)} <span style="font-size:14px" class="muted">CHF</span></div></div>
+    <div class="stat"><div class="label">Mangelbestand</div><div class="value" style="color:${mangel ? 'var(--red)' : 'var(--green)'}">${mangel}</div></div>`;
+}
+
+function sortBy(key) {
+  if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+  render();
+}
+function findArtikel(id) { return artikelCache.find(a => a.id === id); }
+
+// ---------- Artikel anlegen / bearbeiten ----------
+function openArtikelModal(id) {
+  document.getElementById('artikelModalTitle').textContent = id ? 'Artikel bearbeiten' : 'Neuer Artikel';
+  const f = ['id', 'bezeichnung', 'artikelnummer', 'kategorie', 'lagerort', 'menge', 'mindestbestand', 'ek_preis', 'vk_preis', 'bemerkung'];
+  if (id) {
+    const a = findArtikel(id);
+    f.forEach(k => document.getElementById('f_' + k).value = a[k] ?? '');
+  } else {
+    f.forEach(k => document.getElementById('f_' + k).value = (k === 'menge' || k === 'mindestbestand') ? 0 : '');
+  }
+
+  bildVorhanden = []; bildNeu = []; bildEntfernen = [];
+  document.getElementById('f_bild_input').value = '';
+  renderBildGalerie();
+  if (id) api(`/artikel/${id}/bilder`).then(list => { bildVorhanden = list; renderBildGalerie(); }).catch(() => {});
+
+  openModal('artikelModal');
+  setTimeout(() => document.getElementById('f_bezeichnung').focus(), 50);
+}
+
+async function saveArtikel() {
+  const bez = document.getElementById('f_bezeichnung').value.trim();
+  if (!bez) { toast('⚠ Bezeichnung ist erforderlich', true); return; }
+  const id = document.getElementById('f_id').value;
+  const body = {
+    bezeichnung: bez,
+    artikelnummer: document.getElementById('f_artikelnummer').value,
+    kategorie: document.getElementById('f_kategorie').value,
+    lagerort: document.getElementById('f_lagerort').value,
+    menge: document.getElementById('f_menge').value,
+    mindestbestand: document.getElementById('f_mindestbestand').value,
+    ek_preis: document.getElementById('f_ek_preis').value,
+    vk_preis: document.getElementById('f_vk_preis').value,
+    bemerkung: document.getElementById('f_bemerkung').value,
+  };
+  try {
+    const saved = id
+      ? await api('/artikel/' + id, { method: 'PUT', body: JSON.stringify(body) })
+      : await api('/artikel', { method: 'POST', body: JSON.stringify(body) });
+    const savedId = saved.id;
+    for (const bid of bildEntfernen) await api(`/bilder/${bid}`, { method: 'DELETE' });
+    for (const dataUrl of bildNeu) await api(`/artikel/${savedId}/bilder`, { method: 'POST', body: JSON.stringify({ bild: dataUrl }) });
+    closeModal('artikelModal');
+    await ladeArtikel();
+    toast(id ? '✔ Artikel aktualisiert' : '✔ Artikel angelegt');
+  } catch (e) { toast('⚠ ' + e.message, true); }
+}
+
+async function deleteArtikel(id) {
+  const a = findArtikel(id);
+  if (!confirm(`Artikel „${a.bezeichnung}" wirklich löschen?\nDie Bewegungs-Historie und Bilder werden ebenfalls entfernt.`)) return;
+  try {
+    await api('/artikel/' + id, { method: 'DELETE' });
+    await ladeArtikel();
+    toast('🗑 Artikel gelöscht');
+  } catch (e) { toast('⚠ ' + e.message, true); }
+}
+
+// ---------- Ein- / Abbuchen ----------
+function openBuchModal(id, typ) {
+  const a = findArtikel(id);
+  const isEin = typ === 'ein';
+  if (!isEin && a.menge <= 0) { toast('⚠ Kein Bestand zum Abbuchen vorhanden', true); return; }
+  document.getElementById('b_id').value = id;
+  document.getElementById('b_typ').value = typ;
+  document.getElementById('b_name').textContent = a.bezeichnung;
+  document.getElementById('b_aktuell').textContent = a.menge;
+  const mengeInput = document.getElementById('b_menge');
+  mengeInput.value = 1;
+  if (isEin) mengeInput.removeAttribute('max'); else mengeInput.max = a.menge;
+  document.getElementById('b_notiz').value = '';
+  document.getElementById('buchModalTitle').textContent = isEin ? '➕ Teile einbuchen' : '➖ Teile abbuchen';
+  document.getElementById('b_label').textContent = isEin ? 'Menge zubuchen' : 'Menge abbuchen';
+  const btn = document.getElementById('b_save');
+  btn.textContent = isEin ? 'Einbuchen' : 'Abbuchen';
+  btn.className = isEin ? 'green' : 'red';
+  openModal('buchModal');
+  setTimeout(() => { const m = document.getElementById('b_menge'); m.focus(); m.select(); }, 50);
+}
+
+async function saveBuchung() {
+  const id = parseInt(document.getElementById('b_id').value);
+  const typ = document.getElementById('b_typ').value;
+  const menge = parseInt(document.getElementById('b_menge').value);
+  const notiz = document.getElementById('b_notiz').value.trim() || null;
+  if (!menge || menge <= 0) { toast('⚠ Bitte gültige Menge eingeben', true); return; }
+  try {
+    const r = await api(`/artikel/${id}/buchung`, { method: 'POST', body: JSON.stringify({ typ, menge, notiz }) });
+    closeModal('buchModal');
+    await ladeArtikel();
+    toast(typ === 'ein' ? `✔ ${menge} eingebucht (neu: ${r.menge})` : `✔ ${menge} abgebucht (neu: ${r.menge})`);
+  } catch (e) { toast('⚠ ' + e.message, true); }
+}
+
+// ---------- Historie ----------
+async function openHist(id) {
+  const a = findArtikel(id);
+  document.getElementById('h_name').textContent = a.bezeichnung;
+  const body = document.getElementById('h_body');
+  body.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">lädt…</td></tr>';
+  openModal('histModal');
+  try {
+    const rows = await api(`/artikel/${id}/bewegungen`);
+    if (rows.length === 0) {
+      body.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">Keine Bewegungen.</td></tr>';
+    } else {
+      body.innerHTML = rows.map(r => `<tr>
+          <td>${fmtDatumZeit(r.datum)}</td>
+          <td class="${r.typ === 'ein' ? 'typ-ein' : 'typ-aus'}">${r.typ === 'ein' ? '▲ Eingang' : '▼ Ausgang'}</td>
+          <td class="num">${r.typ === 'ein' ? '+' : '−'}${r.menge}</td>
+          <td>${esc(r.notiz) || '–'}</td>
+        </tr>`).join('');
+    }
+  } catch (e) { body.innerHTML = `<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">Fehler: ${esc(e.message)}</td></tr>`; }
+}
+
+// ---------- Bilder ----------
+function leseUndVerkleinereBild(file, maxDim = 1000, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) { reject(new Error('Bitte eine Bilddatei wählen')); return; }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * scale); height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderBildGalerie() {
+  const box = document.getElementById('f_bilder');
+  const vorhanden = bildVorhanden.map((b, i) =>
+    `<div class="bild-item"><img src="/api/bilder/${b.id}" alt="" loading="lazy"><button type="button" class="del" title="Entfernen" onclick="entferneVorhanden(${i})">×</button></div>`).join('');
+  const neu = bildNeu.map((data, i) =>
+    `<div class="bild-item"><img src="${data}" alt=""><button type="button" class="del" title="Entfernen" onclick="entferneNeu(${i})">×</button></div>`).join('');
+  const add = `<div class="bild-add" onclick="document.getElementById('f_bild_input').click()"><span style="font-size:22px;line-height:1">＋</span><span>Bild</span></div>`;
+  box.innerHTML = vorhanden + neu + add;
+}
+function entferneVorhanden(i) { const b = bildVorhanden.splice(i, 1)[0]; if (b) bildEntfernen.push(b.id); renderBildGalerie(); }
+function entferneNeu(i) { bildNeu.splice(i, 1); renderBildGalerie(); }
+
+document.getElementById('f_bild_input').addEventListener('change', async function () {
+  const files = [...this.files];
+  this.value = '';
+  for (const file of files) {
+    try { bildNeu.push(await leseUndVerkleinereBild(file)); renderBildGalerie(); }
+    catch (e) { toast('⚠ ' + e.message, true); }
+  }
+});
+
+// ---------- Bild-Großansicht ----------
+let lightboxIds = [], lightboxIdx = 0;
+async function openBild(id) {
+  const a = findArtikel(id);
+  document.getElementById('bildModalTitle').textContent = a.bezeichnung;
+  document.getElementById('bildModalImg').removeAttribute('src');
+  openModal('bildModal');
+  try {
+    const list = await api(`/artikel/${id}/bilder`);
+    lightboxIds = list.map(b => b.id); lightboxIdx = 0; showLightbox();
+  } catch { lightboxIds = []; showLightbox(); }
+}
+function showLightbox() {
+  const hat = lightboxIds.length > 0;
+  document.getElementById('bildModalImg').src = hat ? `/api/bilder/${lightboxIds[lightboxIdx]}` : '';
+  const mehr = lightboxIds.length > 1;
+  document.getElementById('lbPrev').style.visibility = mehr ? 'visible' : 'hidden';
+  document.getElementById('lbNext').style.visibility = mehr ? 'visible' : 'hidden';
+  document.getElementById('lbCounter').textContent = mehr ? `${lightboxIdx + 1} / ${lightboxIds.length}` : '';
+}
+function lightboxNav(d) {
+  if (lightboxIds.length === 0) return;
+  lightboxIdx = (lightboxIdx + d + lightboxIds.length) % lightboxIds.length;
+  showLightbox();
+}
+
+// ---------- QR-Code ----------
+let qrCur = null;
+function openQR(id) {
+  const a = findArtikel(id);
+  if (!a) return;
+  qrCur = a;
+  document.getElementById('qrImg').src = `/api/artikel/${id}/qr?ts=${Date.now()}`;
+  document.getElementById('qrLabel').textContent = a.bezeichnung;
+  document.getElementById('qrSub').textContent = a.artikelnummer ? 'Art.-Nr.: ' + a.artikelnummer : '';
+  openModal('qrModal');
+}
+function printQR() {
+  if (!qrCur) return;
+  const a = qrCur;
+  const url = `/api/artikel/${a.id}/qr?ts=${Date.now()}`;
+  const w = window.open('', '_blank', 'width=420,height=520');
+  if (!w) { toast('⚠ Pop-up-Blocker verhindert den Druck', true); return; }
+  w.document.write(`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
+    <title>QR-Code – ${esc(a.bezeichnung)}</title>
+    <style>
+      body{font-family:system-ui,Arial,sans-serif;text-align:center;margin:30px}
+      img{width:280px;height:280px;image-rendering:pixelated}
+      .b{font-weight:700;font-size:18px;margin-top:14px}
+      .s{color:#555;font-size:14px;margin-top:4px}
+      @media print{@page{margin:12mm}}
+    </style></head><body>
+    <img src="${url}" onload="window.focus();window.print()">
+    <div class="b">${esc(a.bezeichnung)}</div>
+    ${a.artikelnummer ? `<div class="s">Art.-Nr.: ${esc(a.artikelnummer)}</div>` : ''}
+    </body></html>`);
+  w.document.close();
+}
+
+// ---------- CSV-Export ----------
+function exportCSV() {
+  const rows = artikelCache;
+  if (rows.length === 0) { toast('Keine Daten zum Export'); return; }
+  const cols = ['bezeichnung', 'artikelnummer', 'kategorie', 'lagerort', 'menge', 'mindestbestand', 'ek_preis', 'vk_preis', 'bemerkung'];
+  const head = ['Bezeichnung', 'Artikelnummer', 'Kategorie', 'Lagerort', 'Menge', 'Mindestbestand', 'EK', 'VK', 'Bemerkung'];
+  const csv = [head.join(';')].concat(rows.map(r =>
+    cols.map(c => {
+      let v = r[c] ?? '';
+      v = String(v).replace(/"/g, '""');
+      return /[;"\n]/.test(v) ? `"${v}"` : v;
+    }).join(';')
+  )).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `lager_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  URL.revokeObjectURL(url);
+  toast('⬇ CSV exportiert');
+}
+
+// ---------- Tastatur (seitenspezifisch) ----------
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('buchModal').classList.contains('open')) saveBuchung();
+  if (document.getElementById('bildModal').classList.contains('open')) {
+    if (e.key === 'ArrowLeft') lightboxNav(-1);
+    if (e.key === 'ArrowRight') lightboxNav(1);
+  }
+});
+document.getElementById('b_menge').addEventListener('input', function () {
+  const max = this.getAttribute('max');
+  if (max !== null && this.value !== '' && parseInt(this.value) > parseInt(max)) {
+    this.value = max; toast(`⚠ Nur ${max} Stück auf Lager`, true);
+  }
+});
+
+ladeArtikel();
+</script>
+</body>
+</html>

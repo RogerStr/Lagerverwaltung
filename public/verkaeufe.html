@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verkäufe – Lagerverwaltung</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav id="nav" class="topnav"></nav>
+
+<main>
+  <div class="pagehead">
+    <h1>📋 Verkäufe</h1>
+    <div class="toolbar"><button class="green" onclick="location.href='verkauf.html'">+ Neuer Verkauf</button></div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="searchbar">
+    <input type="text" id="search" placeholder="🔍 Suche nach Empfänger oder Nummer…" oninput="render()">
+    <select id="statusFilter" onchange="render()">
+      <option value="">Alle</option>
+      <option value="offen">Nur offene</option>
+      <option value="abgeschlossen">Nur abgeschlossene</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr>
+        <th class="sortable" onclick="sortBy('nummer')">Nummer</th>
+        <th class="sortable" onclick="sortBy('datum')">Datum</th>
+        <th class="sortable" onclick="sortBy('kunde_name')">Empfänger</th>
+        <th class="sortable" onclick="sortBy('status')">Status</th>
+        <th class="num">Pos.</th>
+        <th class="sortable num" onclick="sortBy('summe')">Betrag</th>
+        <th>Aktionen</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="emptyState" class="empty" style="display:none">Noch keine Verkäufe. Klicke auf „+ Neuer Verkauf".</div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+<script>
+renderNav('verkaeufe');
+let cache = [];
+let sortKey = 'datum', sortDir = -1;
+
+async function laden() {
+  try { cache = await api('/verkaeufe'); setStatus(true); render(); }
+  catch (e) { setStatus(false); toast('⚠ Server nicht erreichbar', true); }
+}
+
+function sortBy(key) {
+  if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = (key === 'datum' || key === 'summe') ? -1 : 1; }
+  render();
+}
+
+function render() {
+  const term = document.getElementById('search').value.toLowerCase().trim();
+  const sf = document.getElementById('statusFilter').value;
+
+  let rows = cache.filter(v => {
+    if (sf && v.status !== sf) return false;
+    if (term) {
+      const hay = [v.nummer, v.kunde_name].join(' ').toLowerCase();
+      if (!hay.includes(term)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    let x = a[sortKey], y = b[sortKey];
+    if (sortKey === 'datum') { x = a.datum || a.erstellt; y = b.datum || b.erstellt; }
+    if (typeof x === 'string') x = x.toLowerCase();
+    if (typeof y === 'string') y = y.toLowerCase();
+    if (x == null) x = ''; if (y == null) y = '';
+    return (x < y ? -1 : x > y ? 1 : 0) * sortDir;
+  });
+
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = rows.map(v => {
+    const offen = v.status === 'offen';
+    const badge = offen ? '<span class="badge offen">offen</span>' : '<span class="badge fertig">abgeschlossen</span>';
+    const datum = offen ? `${fmtDatum(v.erstellt)} <span class="muted">(Entwurf)</span>` : fmtDatum(v.datum);
+    const aktionen = offen
+      ? `<button class="secondary small" onclick="location.href='verkauf.html?id=${v.id}'">✎ Bearbeiten</button>
+         <button class="gray small" onclick="loeschen(${v.id})">🗑</button>`
+      : `${v.hat_pdf ? `<button class="secondary small" onclick="window.open('/api/verkaeufe/${v.id}/pdf','_blank')">📄 Rechnung</button>
+           <button class="gray small" onclick="window.open('/api/verkaeufe/${v.id}/pdf?dl=1','_blank')" title="Herunterladen">⬇</button>` : '<span class="muted">kein PDF</span>'}
+         <button class="gray small" onclick="loeschen(${v.id})">🗑</button>`;
+    return `<tr>
+      <td><strong>${esc(v.nummer) || '–'}</strong></td>
+      <td>${datum}</td>
+      <td>${esc(v.kunde_name) || '<span class="muted">—</span>'}</td>
+      <td>${badge}</td>
+      <td class="num">${v.pos_anzahl}</td>
+      <td class="num">${offen ? '<span class="muted">–</span>' : fmtCHF(v.summe)}</td>
+      <td><div class="actions-cell">${aktionen}</div></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('emptyState').style.display = cache.length === 0 ? 'block' : 'none';
+
+  const offen = cache.filter(v => v.status === 'offen').length;
+  const fertig = cache.filter(v => v.status === 'abgeschlossen');
+  const umsatz = fertig.reduce((s, v) => s + (v.summe || 0), 0);
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="label">Verkäufe gesamt</div><div class="value">${cache.length}</div></div>
+    <div class="stat"><div class="label">Offen</div><div class="value" style="color:${offen ? 'var(--amber)' : 'var(--green)'}">${offen}</div></div>
+    <div class="stat"><div class="label">Abgeschlossen</div><div class="value">${fertig.length}</div></div>
+    <div class="stat"><div class="label">Umsatz (abgeschlossen)</div><div class="value">${umsatz.toFixed(2)} <span style="font-size:14px" class="muted">CHF</span></div></div>`;
+}
+
+async function loeschen(id) {
+  const v = cache.find(x => x.id === id);
+  const fertig = v.status === 'abgeschlossen';
+  const msg = fertig
+    ? `Abgeschlossenen Verkauf ${v.nummer} wirklich löschen?\nHinweis: Der abgebuchte Lagerbestand wird dadurch NICHT wieder gutgeschrieben.`
+    : `Entwurf wirklich löschen?`;
+  if (!confirm(msg)) return;
+  try { await api('/verkaeufe/' + id, { method: 'DELETE' }); await laden(); toast('🗑 Verkauf gelöscht'); }
+  catch (e) { toast('⚠ ' + e.message, true); }
+}
+
+laden();
+</script>
+</body>
+</html>
