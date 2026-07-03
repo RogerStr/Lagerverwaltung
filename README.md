@@ -151,3 +151,4 @@ lagerverwaltung/
 Anderen Port verwenden: `PORT=8080 ./lagerverwaltung`. Bei Port 80 prüfen, ob
 ein anderer Webserver läuft: `sudo ss -tlnp | grep ':80'`.
 
+
