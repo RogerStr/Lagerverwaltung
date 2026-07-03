@@ -6,9 +6,9 @@ After=network.target
 # Benutzer, unter dem der Dienst läuft (z. B. pi)
 User=pi
 # Pfad zum Programmordner (enthält das Binary und public/)
-WorkingDirectory=/home/pi/lagerverwaltung
+WorkingDirectory=/home/pi/Lagerverwaltung
 # Pfad zum kompilierten Binary
-ExecStart=/home/pi/lagerverwaltung/lagerverwaltung
+ExecStart=/home/pi/lagerverwaltung/Lagerverwaltung
 Restart=on-failure
 # Port (80 = Zugriff ohne :3000 in der URL)
 Environment=PORT=80
