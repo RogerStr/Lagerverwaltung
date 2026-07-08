@@ -107,13 +107,13 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---------- Bilder ---------- */
 .thumb-wrap { position: relative; display: inline-block; }
-.thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: #fff; cursor: pointer; display: block; }
+.thumb { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); background: #fff; cursor: pointer; display: block; }
 .thumb:hover { outline: 2px solid var(--primary); }
 .thumb-badge { position: absolute; bottom: -4px; right: -4px; background: var(--primary); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 999px; border: 1px solid #fff; pointer-events: none; }
 .thumb-empty { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 6px; border: 1px dashed var(--border); color: var(--muted); font-size: 18px; }
 .bild-galerie { display: flex; flex-wrap: wrap; gap: 10px; }
 .bild-item { position: relative; width: 84px; height: 84px; }
-.bild-item img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); background: #fff; }
+.bild-item img { width: 84px; height: 84px; object-fit: contain; border-radius: 8px; border: 1px solid var(--border); background: #fff; }
 .bild-item .del { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 50%; background: var(--red); color: #fff; border: 2px solid #fff; font-size: 13px; line-height: 1; padding: 0; display: flex; align-items: center; justify-content: center; }
 .bild-item .del:hover { background: #b91c1c; }
 .bild-add { width: 84px; height: 84px; border: 2px dashed var(--border); border-radius: 8px; background: #fafafa; color: var(--muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
