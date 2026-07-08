@@ -73,7 +73,7 @@
         <div class="field"><label>Verkaufspreis VK (CHF)</label><input type="number" id="f_vk_preis" value="" min="0" step="0.01" placeholder="0.00"></div>
         <div class="field full"><label>Bemerkung</label><textarea id="f_bemerkung" rows="2" placeholder="Optionale Notiz…"></textarea></div>
         <div class="field full">
-          <label>Bilder <span class="muted" style="font-weight:400">(werden automatisch verkleinert)</span></label>
+          <label>Bilder <span class="muted" style="font-weight:400">(Originalgröße, max. 5 MB pro Bild)</span></label>
           <div class="bild-galerie" id="f_bilder"></div>
           <input type="file" id="f_bild_input" accept="image/*" multiple style="display:none">
         </div>
@@ -138,7 +138,7 @@
     <div class="modal-body" style="text-align:center">
       <div style="display:flex;align-items:center;gap:10px;justify-content:center">
         <button class="lb-nav" id="lbPrev" onclick="lightboxNav(-1)">‹</button>
-        <img id="bildModalImg" alt="Artikelbild" style="max-width:100%;max-height:70vh;border-radius:8px;flex:1">
+        <img id="bildModalImg" alt="Artikelbild" style="max-width:100%;max-height:70vh;border-radius:8px;flex:1;min-width:0;object-fit:contain">
         <button class="lb-nav" id="lbNext" onclick="lightboxNav(1)">›</button>
       </div>
       <div class="muted" id="lbCounter" style="margin-top:10px;font-size:13px"></div>
@@ -394,29 +394,15 @@ async function openHist(id) {
 }
 
 // ---------- Bilder ----------
-function leseUndVerkleinereBild(file, maxDim = 1000, quality = 0.82) {
+// Bild unverändert in Originalgröße und -format einlesen (kein Verkleinern,
+// kein Neucodieren). Der Server speichert die Daten bis 5 MB pro Bild.
+function leseBildOriginal(file) {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) { reject(new Error('Bitte eine Bilddatei wählen')); return; }
+    if (file.size > 5 * 1024 * 1024) { reject(new Error(`Bild ist ${(file.size / 1048576).toFixed(1)} MB gross (max. 5 MB)`)); return; }
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Bild konnte nicht geladen werden'));
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const scale = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * scale); height = Math.round(height * scale);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = reader.result;
-    };
+    reader.onload = () => resolve(reader.result);
     reader.readAsDataURL(file);
   });
 }
@@ -437,7 +423,7 @@ document.getElementById('f_bild_input').addEventListener('change', async functio
   const files = [...this.files];
   this.value = '';
   for (const file of files) {
-    try { bildNeu.push(await leseUndVerkleinereBild(file)); renderBildGalerie(); }
+    try { bildNeu.push(await leseBildOriginal(file)); renderBildGalerie(); }
     catch (e) { toast('⚠ ' + e.message, true); }
   }
 });
