@@ -16,10 +16,24 @@ body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, san
 .topnav .navinfo { display: flex; align-items: center; gap: 7px; font-size: 13px; background: rgba(255,255,255,.15); padding: 6px 12px; border-radius: 6px; }
 
 main { padding: 24px; max-width: 1200px; margin: 0 auto; }
-/* Lager-Übersicht darf die volle Fensterbreite nutzen (viele Spalten) */
+/* Lager-Übersicht: volle Fensterbreite (viele Spalten). Die Tabelle wird
+   höchstens so hoch wie das Fenster (minus Kopfbereich) und scrollt dann
+   intern; passt der Kopfbereich selbst nicht mehr, scrollt die ganze Seite
+   wie gewohnt. Der Spaltenkopf bleibt beim Scrollen sichtbar. */
 main.wide { max-width: none; }
-main.wide .card { overflow-x: auto; }
+main.wide .card { max-height: max(240px, 100vh - 300px); overflow: auto; }
 main.wide table { min-width: 900px; }
+main.wide thead th { position: sticky; top: 0; z-index: 2; }
+
+/* Erste zwei Spalten (Bild + Bezeichnung) beim horizontalen Scrollen fixieren.
+   Sticky-Zellen brauchen einen deckenden Hintergrund, sonst scheint der Inhalt
+   durch, der darunter durchgeschoben wird. */
+main.wide th:nth-child(1), main.wide td:nth-child(1) { position: sticky; left: 0; width: 72px; min-width: 72px; max-width: 72px; }
+main.wide th:nth-child(2), main.wide td:nth-child(2) { position: sticky; left: 72px; }
+main.wide tbody td:nth-child(1), main.wide tbody td:nth-child(2) { background: var(--card); z-index: 1; }
+main.wide thead th:nth-child(1), main.wide thead th:nth-child(2) { z-index: 3; }
+main.wide tbody tr.row-low td:nth-child(1), main.wide tbody tr.row-low td:nth-child(2) { background: #fef2f2; }
+main.wide tbody tr:hover td:nth-child(1), main.wide tbody tr:hover td:nth-child(2) { background: #f8fafc; }
 .pagehead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 .pagehead h1 { margin: 0; font-size: 22px; }
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }

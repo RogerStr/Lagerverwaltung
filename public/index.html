@@ -525,6 +525,9 @@ function exportCSV() {
 // ---------- Tastatur (seitenspezifisch) ----------
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && document.getElementById('buchModal').classList.contains('open')) saveBuchung();
+  if (e.key === 'Enter' && document.getElementById('artikelModal').classList.contains('open') && e.target.tagName !== 'TEXTAREA') {
+    e.preventDefault(); saveArtikel();
+  }
   if (document.getElementById('bildModal').classList.contains('open')) {
     if (e.key === 'ArrowLeft') lightboxNav(-1);
     if (e.key === 'ArrowRight') lightboxNav(1);
