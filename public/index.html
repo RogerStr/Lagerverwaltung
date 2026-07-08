@@ -26,6 +26,9 @@
     <label class="muted" style="display:flex;align-items:center;gap:6px;font-size:14px;">
       <input type="checkbox" id="lowOnly" onchange="render()" style="width:auto"> nur Mangelbestand
     </label>
+    <label class="muted" style="display:flex;align-items:center;gap:6px;font-size:14px;">
+      <input type="checkbox" id="showEK" onchange="toggleEK()" style="width:auto"> EK anzeigen
+    </label>
   </div>
 
   <div class="card">
@@ -41,7 +44,7 @@
           <th class="sortable num" onclick="sortBy('reserviert')">Blockiert</th>
           <th class="num">Verfügbar</th>
           <th class="sortable num" onclick="sortBy('mindestbestand')">Min.</th>
-          <th class="sortable num" onclick="sortBy('ek_preis')">EK</th>
+          <th class="sortable num col-ek" onclick="sortBy('ek_preis')">EK</th>
           <th class="sortable num" onclick="sortBy('vk_preis')">VK</th>
           <th>Status</th>
           <th>Aktionen</th>
@@ -241,7 +244,7 @@ function render() {
       <td class="num">${reserviert > 0 ? `<span style="color:var(--amber)">${reserviert}</span>` : '<span class="muted">–</span>'}</td>
       <td class="num"><strong style="color:${frei <= 0 ? 'var(--red)' : 'inherit'}">${frei}</strong></td>
       <td class="num muted">${a.mindestbestand || '–'}</td>
-      <td class="num">${fmtPreis(a.ek_preis)}</td>
+      <td class="num col-ek">${fmtPreis(a.ek_preis)}</td>
       <td class="num">${fmtPreis(a.vk_preis)}</td>
       <td>${statusBadge}</td>
       <td><div class="actions-cell">
@@ -266,7 +269,7 @@ function render() {
     <div class="stat"><div class="label">Artikel</div><div class="value">${all.length}</div></div>
     <div class="stat"><div class="label">Teile gesamt</div><div class="value">${gesamtTeile}</div></div>
     <div class="stat"><div class="label">Blockiert (offene Verkäufe)</div><div class="value" style="color:${blockiert ? 'var(--amber)' : 'var(--muted)'}">${blockiert}</div></div>
-    <div class="stat"><div class="label">Lagerwert (EK)</div><div class="value">${wertEK.toFixed(2)} <span style="font-size:14px" class="muted">CHF</span></div></div>
+    <div class="stat col-ek"><div class="label">Lagerwert (EK)</div><div class="value">${wertEK.toFixed(2)} <span style="font-size:14px" class="muted">CHF</span></div></div>
     <div class="stat"><div class="label">Verkaufswert (VK)</div><div class="value">${wertVK.toFixed(2)} <span style="font-size:14px" class="muted">CHF</span></div></div>
     <div class="stat"><div class="label">Mangelbestand</div><div class="value" style="color:${mangel ? 'var(--red)' : 'var(--green)'}">${mangel}</div></div>`;
 }
@@ -275,6 +278,19 @@ function sortBy(key) {
   if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
   render();
 }
+
+// ---------- EK-Spalte ein-/ausblenden (Zustand wird gespeichert) ----------
+function applyEK(show) { document.body.classList.toggle('hide-ek', !show); }
+function toggleEK() {
+  const show = document.getElementById('showEK').checked;
+  localStorage.setItem('showEK', show ? '1' : '0');
+  applyEK(show);
+}
+(function initEK() {
+  const show = localStorage.getItem('showEK') === '1'; // Standard: ausgeblendet
+  document.getElementById('showEK').checked = show;
+  applyEK(show);
+})();
 function findArtikel(id) { return artikelCache.find(a => a.id === id); }
 
 // ---------- Artikel anlegen / bearbeiten ----------

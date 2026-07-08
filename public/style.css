@@ -70,6 +70,8 @@ th.sortable { cursor: pointer; }
 th.sortable:hover { color: var(--text); }
 tbody tr:hover { background: #f8fafc; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* EK-Spalte / EK-Kennzahl ausblenden, wenn body.hide-ek gesetzt ist */
+body.hide-ek .col-ek { display: none; }
 .row-low { background: #fef2f2; } .row-low:hover { background: #fee2e2; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .badge.low { background: #fee2e2; color: var(--red); } .badge.ok { background: #dcfce7; color: var(--green); }
