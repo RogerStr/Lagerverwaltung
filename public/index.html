@@ -23,6 +23,7 @@
   <div class="searchbar">
     <input type="text" id="search" placeholder="🔍 Suche nach Bezeichnung, Nummer, Lagerort, Kategorie…" oninput="render()">
     <select id="kategorieFilter" onchange="render()"><option value="">Alle Kategorien</option></select>
+    <select id="lagerortFilter" onchange="render()"><option value="">Alle Lagerorte</option></select>
     <label class="muted" style="display:flex;align-items:center;gap:6px;font-size:14px;">
       <input type="checkbox" id="lowOnly" onchange="render()" style="width:auto"> nur Mangelbestand
     </label>
@@ -196,6 +197,7 @@ function render() {
   const all = artikelCache;
   const term = document.getElementById('search').value.toLowerCase().trim();
   const katFilter = document.getElementById('kategorieFilter').value;
+  const ortFilter = document.getElementById('lagerortFilter').value;
   const lowOnly = document.getElementById('lowOnly').checked;
 
   const kategorien = [...new Set(all.map(a => a.kategorie).filter(Boolean))].sort();
@@ -204,8 +206,14 @@ function render() {
   kf.innerHTML = '<option value="">Alle Kategorien</option>' + kategorien.map(k => `<option ${k === cur ? 'selected' : ''}>${esc(k)}</option>`).join('');
   document.getElementById('kategorieList').innerHTML = kategorien.map(k => `<option value="${esc(k)}">`).join('');
 
+  const lagerorte = [...new Set(all.map(a => a.lagerort).filter(Boolean))].sort();
+  const lf = document.getElementById('lagerortFilter');
+  const curOrt = lf.value;
+  lf.innerHTML = '<option value="">Alle Lagerorte</option>' + lagerorte.map(o => `<option ${o === curOrt ? 'selected' : ''}>${esc(o)}</option>`).join('');
+
   let rows = all.filter(a => {
     if (katFilter && a.kategorie !== katFilter) return false;
+    if (ortFilter && a.lagerort !== ortFilter) return false;
     if (lowOnly && !(a.menge <= a.mindestbestand && a.mindestbestand > 0)) return false;
     if (term) {
       const hay = [a.bezeichnung, a.artikelnummer, a.lagerort, a.kategorie, a.bemerkung].join(' ').toLowerCase();
