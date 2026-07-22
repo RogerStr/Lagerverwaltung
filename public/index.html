@@ -69,7 +69,7 @@
       <div class="form-grid">
         <div class="field full"><label>Bezeichnung *</label><input type="text" id="f_bezeichnung" placeholder="z.B. Sechskantschraube M6x20"></div>
         <div class="field"><label>Artikelnummer / SKU</label><input type="text" id="f_artikelnummer" placeholder="z.B. A-1024"></div>
-        <div class="field"><label>Kategorie</label><input type="text" id="f_kategorie" list="kategorieList" placeholder="z.B. Schrauben"><datalist id="kategorieList"></datalist></div>
+        <div class="field"><label>Kategorie <span class="muted" style="font-weight:400">(Unterkategorien mit „&gt;" trennen)</span></label><input type="text" id="f_kategorie" list="kategorieList" placeholder="z.B. Werkzeug &gt; Schraubendreher"><datalist id="kategorieList"></datalist></div>
         <div class="field"><label>Menge / Bestand</label><input type="number" id="f_menge" value="0" min="0" step="1"></div>
         <div class="field"><label>Lagerort / Fach</label><input type="text" id="f_lagerort" placeholder="z.B. Regal B / Fach 3"></div>
         <div class="field"><label>Mindestbestand</label><input type="number" id="f_mindestbestand" value="0" min="0" step="1"></div>
@@ -192,6 +192,31 @@ async function ladeArtikel() {
   }
 }
 
+// ---------- Kategorien mit Unterkategorien ----------
+// Die Hierarchie steckt als Pfad im Kategorie-Feld: "Werkzeug > Schraubendreher".
+// Beliebig viele Ebenen möglich, z.B. "Werkzeug > Schraubendreher > Kreuzschlitz".
+const KAT_SEP = ' > ';
+function katSegmente(k) { return String(k ?? '').split('>').map(s => s.trim()).filter(Boolean); }
+function normKategorie(k) { return katSegmente(k).join(KAT_SEP); }
+
+// Alle vorkommenden Pfade inkl. aller Zwischenebenen, alphabetisch (Eltern vor Kindern)
+function katPfade(all) {
+  const set = new Set();
+  all.forEach(a => {
+    const seg = katSegmente(a.kategorie);
+    for (let i = 1; i <= seg.length; i++) set.add(seg.slice(0, i).join(KAT_SEP));
+  });
+  return [...set].sort((a, b) => a.localeCompare(b, 'de'));
+}
+
+// Anzeige in der Tabelle: Elternpfad dezent, unterste Ebene hervorgehoben
+function katAnzeige(k) {
+  const seg = katSegmente(k);
+  if (seg.length === 0) return '–';
+  const last = esc(seg.pop());
+  return seg.length ? `<span class="muted" style="font-size:12px">${esc(seg.join(' › '))} › </span>${last}` : last;
+}
+
 // ---------- Rendering ----------
 function render() {
   const all = artikelCache;
@@ -200,10 +225,15 @@ function render() {
   const ortFilter = document.getElementById('lagerortFilter').value;
   const lowOnly = document.getElementById('lowOnly').checked;
 
-  const kategorien = [...new Set(all.map(a => a.kategorie).filter(Boolean))].sort();
+  const kategorien = katPfade(all);
   const kf = document.getElementById('kategorieFilter');
   const cur = kf.value;
-  kf.innerHTML = '<option value="">Alle Kategorien</option>' + kategorien.map(k => `<option ${k === cur ? 'selected' : ''}>${esc(k)}</option>`).join('');
+  kf.innerHTML = '<option value="">Alle Kategorien</option>' + kategorien.map(k => {
+    const seg = katSegmente(k);
+    const tiefe = seg.length - 1;
+    const einzug = '    '.repeat(tiefe) + (tiefe ? '↳ ' : '');
+    return `<option value="${esc(k)}" ${k === cur ? 'selected' : ''}>${einzug}${esc(seg[seg.length - 1])}</option>`;
+  }).join('');
   document.getElementById('kategorieList').innerHTML = kategorien.map(k => `<option value="${esc(k)}">`).join('');
 
   const lagerorte = [...new Set(all.map(a => a.lagerort).filter(Boolean))].sort();
@@ -212,7 +242,11 @@ function render() {
   lf.innerHTML = '<option value="">Alle Lagerorte</option>' + lagerorte.map(o => `<option ${o === curOrt ? 'selected' : ''}>${esc(o)}</option>`).join('');
 
   let rows = all.filter(a => {
-    if (katFilter && a.kategorie !== katFilter) return false;
+    // Elternkategorie wählen zeigt auch alle Unterkategorien
+    if (katFilter) {
+      const ak = normKategorie(a.kategorie);
+      if (ak !== katFilter && !ak.startsWith(katFilter + KAT_SEP)) return false;
+    }
     if (ortFilter && a.lagerort !== ortFilter) return false;
     if (lowOnly && !(a.menge <= a.mindestbestand && a.mindestbestand > 0)) return false;
     if (term) {
@@ -246,7 +280,7 @@ function render() {
       <td>${bild}</td>
       <td><strong>${esc(a.bezeichnung)}</strong>${a.bemerkung ? `<br><span class="muted" style="font-size:12px">${esc(a.bemerkung)}</span>` : ''}</td>
       <td>${esc(a.artikelnummer) || '–'}</td>
-      <td>${esc(a.kategorie) || '–'}</td>
+      <td>${katAnzeige(a.kategorie)}</td>
       <td>${esc(a.lagerort) || '–'}</td>
       <td class="num"><strong>${a.menge}</strong></td>
       <td class="num">${reserviert > 0 ? `<span style="color:var(--amber)">${reserviert}</span>` : '<span class="muted">–</span>'}</td>
@@ -328,7 +362,7 @@ async function saveArtikel() {
   const body = {
     bezeichnung: bez,
     artikelnummer: document.getElementById('f_artikelnummer').value,
-    kategorie: document.getElementById('f_kategorie').value,
+    kategorie: normKategorie(document.getElementById('f_kategorie').value),
     lagerort: document.getElementById('f_lagerort').value,
     menge: document.getElementById('f_menge').value,
     mindestbestand: document.getElementById('f_mindestbestand').value,
