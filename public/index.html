@@ -15,6 +15,8 @@
     <div class="toolbar">
       <button class="green" onclick="openArtikelModal()">+ Neuer Artikel</button>
       <button class="secondary small" onclick="exportCSV()">⬇ CSV</button>
+      <button class="secondary small" onclick="exportMitBildern()" title="CSV samt Bilddateien auf diesem Rechner speichern">⬇ CSV + Bilder</button>
+      <button class="secondary small" onclick="openImportModal()">⬆ CSV-Import</button>
     </div>
   </div>
 
@@ -86,6 +88,45 @@
     <div class="modal-foot">
       <button class="gray" onclick="closeModal('artikelModal')">Abbrechen</button>
       <button class="green" onclick="saveArtikel()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV-Import-Modal -->
+<div class="modal-backdrop" id="importModal">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-head">
+      <h2>CSV-Import</h2>
+      <button class="close-x" onclick="closeModal('importModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="margin-top:0;font-size:13px;line-height:1.55">
+        Spalten: <code>Bezeichnung;Artikelnummer;Kategorie;Lagerort;Menge;Mindestbestand;EK;VK;Bemerkung;Bilder</code><br>
+        Pflicht ist nur die <strong>Bezeichnung</strong>. Kategorie und Lagerort dürfen Unterebenen
+        mit „&gt;" enthalten (<code>Werkzeug &gt; Schraubendreher</code>).<br>
+        In der Spalte <strong>Bilder</strong> stehen Dateipfade, mehrere mit „<strong>|</strong>" getrennt.
+        Relative Pfade gelten ab dem Ordner der CSV-Datei.<br>
+        Artikelnummern, die es schon gibt, werden übersprungen.
+      </p>
+      <div class="field">
+        <label>Pfad zur CSV-Datei auf diesem Rechner</label>
+        <input type="text" id="i_pfad" placeholder="z.B. /home/…/export/lager_2026-07-23_101500/lager.csv">
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label>… oder CSV-Datei hochladen</label>
+        <input type="file" id="i_datei" accept=".csv,text/csv,text/plain">
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label>Bilder-Basisordner <span class="muted" style="font-weight:400">(nur beim Hochladen nötig, wenn die CSV relative Bildpfade enthält)</span></label>
+        <input type="text" id="i_basis" placeholder="z.B. /home/…/meine-bilder">
+      </div>
+      <div id="i_ergebnis" style="margin-top:16px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="gray" onclick="closeModal('importModal')">Schliessen</button>
+      <button class="secondary" onclick="downloadVorlage()">⬇ Leere Vorlage</button>
+      <button class="secondary" onclick="startImport(true)">Nur prüfen</button>
+      <button class="green" onclick="startImport(false)">Importieren</button>
     </div>
   </div>
 </div>
@@ -610,6 +651,77 @@ function exportCSV() {
   a.href = url; a.download = `lager_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
   URL.revokeObjectURL(url);
   toast('⬇ CSV exportiert');
+}
+
+// ---------- CSV: Vorlage, Export mit Bildern, Import ----------
+function downloadVorlage() { window.location.href = '/api/artikel/vorlage'; }
+
+// Schreibt CSV + Bilddateien in einen Ordner auf dem Rechner, auf dem der Server läuft
+async function exportMitBildern() {
+  try {
+    const r = await api('/artikel/export', { method: 'POST', body: JSON.stringify({}) });
+    toast(`✔ ${r.artikel} Artikel und ${r.bilder} Bilder exportiert\n${r.ordner}`);
+  } catch (e) { toast('⚠ ' + e.message, true); }
+}
+
+function openImportModal() {
+  document.getElementById('i_ergebnis').innerHTML = '';
+  openModal('importModal');
+}
+
+async function startImport(nurPruefen) {
+  const pfad = document.getElementById('i_pfad').value.trim();
+  const basis = document.getElementById('i_basis').value.trim();
+  const datei = document.getElementById('i_datei').files[0];
+  if (!pfad && !datei) { toast('⚠ Bitte einen CSV-Pfad angeben oder eine Datei wählen', true); return; }
+
+  const body = { pruefen: nurPruefen, basis };
+  if (pfad) body.pfad = pfad;
+  else body.csv = await datei.text();
+
+  const box = document.getElementById('i_ergebnis');
+  box.innerHTML = '<span class="muted">Wird verarbeitet…</span>';
+  try {
+    const r = await api('/artikel/import', { method: 'POST', body: JSON.stringify(body) });
+    zeigeImportErgebnis(r);
+    if (!nurPruefen && r.angelegt > 0) {
+      await ladeArtikel();
+      toast(`✔ ${r.angelegt} Artikel importiert`);
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="badge leer" style="display:inline-block">Fehler</div> <span>${esc(e.message)}</span>`;
+  }
+}
+
+function zeigeImportErgebnis(r) {
+  const kopf = r.geprueft
+    ? `<strong>Prüfung</strong> – es wurde noch nichts gespeichert.`
+    : `<strong>Import abgeschlossen.</strong>`;
+  const zeilen = r.zeilen.map(z => {
+    const farbe = z.status === 'fehler' ? 'var(--red)' : z.status === 'uebersprungen' ? 'var(--amber)' : 'var(--green)';
+    const text = z.status === 'fehler' ? 'Fehler' : z.status === 'uebersprungen' ? 'übersprungen' : (r.geprueft ? 'wird angelegt' : 'angelegt');
+    return `<tr>
+      <td class="num muted">${z.zeile}</td>
+      <td>${esc(z.bezeichnung) || '<span class="muted">–</span>'}</td>
+      <td style="color:${farbe}">${text}</td>
+      <td class="num">${z.bilder || '<span class="muted">–</span>'}</td>
+      <td class="muted" style="font-size:12px">${esc(z.hinweis)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('i_ergebnis').innerHTML = `
+    <p style="margin:0 0 8px">${kopf}</p>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">
+      ${r.geprueft ? 'Anlegbar' : 'Angelegt'}: <strong>${r.angelegt}</strong> ·
+      Übersprungen: <strong>${r.uebersprungen}</strong> ·
+      Fehler: <strong>${r.fehler}</strong> ·
+      Bilder: <strong>${r.bilder}</strong><br>
+      Bilder-Basisordner: <code>${esc(r.basis)}</code>
+    </p>
+    ${zeilen ? `<div class="card" style="max-height:280px;overflow:auto">
+      <table class="hist-table">
+        <thead><tr><th class="num">Zeile</th><th>Bezeichnung</th><th>Status</th><th class="num">Bilder</th><th>Hinweis</th></tr></thead>
+        <tbody>${zeilen}</tbody>
+      </table></div>` : '<span class="muted">Keine Datenzeilen gefunden.</span>'}`;
 }
 
 // ---------- Tastatur (seitenspezifisch) ----------
