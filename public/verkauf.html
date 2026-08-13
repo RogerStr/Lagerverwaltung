@@ -38,7 +38,15 @@
   <div class="card" style="padding:20px">
     <div class="pagehead" style="margin-bottom:12px">
       <h2 style="margin:0;font-size:17px">Positionen</h2>
-      <button class="secondary small" onclick="addPos()">+ Position</button>
+      <div class="toolbar" style="gap:8px">
+        <div class="artikel-suche" style="position:relative">
+          <input type="text" id="artikelSuche" placeholder="🔍 Artikel suchen…" autocomplete="off"
+                 style="width:260px" oninput="sucheArtikel()" onkeydown="sucheTaste(event)"
+                 onfocus="sucheArtikel()" onblur="setTimeout(sucheSchliessen, 150)">
+          <div id="sucheTreffer" class="such-liste" style="display:none"></div>
+        </div>
+        <button class="secondary small" onclick="addPos()">+ Position</button>
+      </div>
     </div>
     <table class="pos-table">
       <thead><tr>
@@ -170,6 +178,67 @@ function render() {
 }
 
 function addPos() { positionen.push({ artikel_id: null, bezeichnung: '', artikelnummer: null, menge: 1, vk_preis: 0 }); render(); scheduleSave(); }
+
+// ---------- Artikel-Schnellsuche (nur Eingabehilfe – nie im PDF) ----------
+let suchAktiv = -1; // Index des per Tastatur markierten Treffers
+function sucheKandidaten() {
+  const q = document.getElementById('artikelSuche').value.trim().toLowerCase();
+  if (!q) return [];
+  return artikelListe.filter(a =>
+    String(a.bezeichnung || '').toLowerCase().includes(q) ||
+    String(a.artikelnummer || '').toLowerCase().includes(q)
+  ).slice(0, 12);
+}
+function sucheArtikel() {
+  const box = document.getElementById('sucheTreffer');
+  const treffer = sucheKandidaten();
+  suchAktiv = -1;
+  if (!treffer.length) {
+    const q = document.getElementById('artikelSuche').value.trim();
+    box.innerHTML = q ? '<div class="such-leer muted">Kein Artikel gefunden</div>' : '';
+    box.style.display = q ? 'block' : 'none';
+    return;
+  }
+  box.innerHTML = treffer.map((a, i) =>
+    `<div class="such-item" data-id="${a.id}" onmousedown="artikelWaehlen(${a.id})">
+       <span class="such-bez">${esc(a.bezeichnung)}</span>
+       <span class="such-meta muted">${a.artikelnummer ? esc(a.artikelnummer) + ' · ' : ''}Bestand: ${a.menge}</span>
+     </div>`).join('');
+  box.style.display = 'block';
+}
+function sucheTaste(e) {
+  const box = document.getElementById('sucheTreffer');
+  const items = [...box.querySelectorAll('.such-item')];
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); suchAktiv = Math.min(suchAktiv + 1, items.length - 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); suchAktiv = Math.max(suchAktiv - 1, 0); }
+  else if (e.key === 'Enter') { e.preventDefault(); const i = suchAktiv < 0 ? 0 : suchAktiv; artikelWaehlen(parseInt(items[i].dataset.id)); return; }
+  else if (e.key === 'Escape') { sucheSchliessen(); return; }
+  else return;
+  items.forEach((el, i) => el.classList.toggle('aktiv', i === suchAktiv));
+}
+function sucheSchliessen() {
+  document.getElementById('sucheTreffer').style.display = 'none';
+  suchAktiv = -1;
+}
+// Gewählten Artikel als Position übernehmen: leere Position füllen, sonst neue anlegen
+function artikelWaehlen(id) {
+  const a = artikelListe.find(x => x.id == id);
+  if (!a) return;
+  let i = positionen.findIndex(p => !p.artikel_id && !p.bezeichnung.trim());
+  if (i === -1) { positionen.push({ artikel_id: null, bezeichnung: '', artikelnummer: null, menge: 1, vk_preis: 0 }); i = positionen.length - 1; }
+  positionen[i].artikel_id = a.id;
+  positionen[i].bezeichnung = a.bezeichnung;
+  positionen[i].artikelnummer = a.artikelnummer;
+  positionen[i].vk_preis = a.vk_preis || 0;
+  if (!positionen[i].menge) positionen[i].menge = 1;
+  render();
+  clampMenge(i, true);
+  updateZeile(i);
+  scheduleSave();
+  const inp = document.getElementById('artikelSuche');
+  inp.value = ''; sucheSchliessen(); inp.focus();
+}
 function removePos(i) { positionen.splice(i, 1); render(); scheduleSave(); }
 
 // Noch verfügbarer Bestand für Position i: Lagerbestand minus die in ANDEREN offenen

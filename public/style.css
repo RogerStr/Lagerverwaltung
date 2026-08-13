@@ -132,6 +132,15 @@ body.hide-ek .col-ek { display: none; }
 .summe-zeile .gross { font-size: 24px; font-weight: 700; }
 .adr-box { white-space: pre-line; font-size: 14px; line-height: 1.45; }
 
+/* ---------- Artikel-Schnellsuche ---------- */
+.such-liste { position: absolute; top: 100%; left: 0; z-index: 50; margin-top: 4px; width: 340px; max-width: 80vw; max-height: 320px; overflow-y: auto; background: var(--card, #fff); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+.such-item { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.such-item:last-child { border-bottom: 0; }
+.such-item:hover, .such-item.aktiv { background: var(--hover, #eef2ff); }
+.such-bez { font-weight: 600; }
+.such-meta { font-size: 12px; white-space: nowrap; }
+.such-leer { padding: 10px 12px; font-size: 14px; }
+
 /* ---------- Toast ---------- */
 #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; padding: 12px 20px; border-radius: 8px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 100; white-space: pre-line; max-width: 90vw; text-align: center; }
 #toast.show { opacity: 1; }
