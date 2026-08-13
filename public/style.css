@@ -138,6 +138,7 @@ body.hide-ek .col-ek { display: none; }
 .such-item:last-child { border-bottom: 0; }
 .such-item:hover, .such-item.aktiv { background: var(--hover, #eef2ff); }
 .such-bez { font-weight: 600; }
+.such-ort { font-weight: 400; font-size: 12px; }
 .such-meta { font-size: 12px; white-space: nowrap; }
 .such-leer { padding: 10px 12px; font-size: 14px; }
 

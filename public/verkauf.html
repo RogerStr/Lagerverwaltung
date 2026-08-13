@@ -186,7 +186,9 @@ function sucheKandidaten() {
   if (!q) return [];
   return artikelListe.filter(a =>
     String(a.bezeichnung || '').toLowerCase().includes(q) ||
-    String(a.artikelnummer || '').toLowerCase().includes(q)
+    String(a.artikelnummer || '').toLowerCase().includes(q) ||
+    String(a.kategorie || '').toLowerCase().includes(q) ||
+    String(a.lagerort || '').toLowerCase().includes(q)
   ).slice(0, 12);
 }
 function sucheArtikel() {
@@ -199,11 +201,13 @@ function sucheArtikel() {
     box.style.display = q ? 'block' : 'none';
     return;
   }
-  box.innerHTML = treffer.map((a, i) =>
-    `<div class="such-item" data-id="${a.id}" onmousedown="artikelWaehlen(${a.id})">
-       <span class="such-bez">${esc(a.bezeichnung)}</span>
+  box.innerHTML = treffer.map((a, i) => {
+    const ort = [a.kategorie, a.lagerort].filter(Boolean).join(' · ');
+    return `<div class="such-item" data-id="${a.id}" onmousedown="artikelWaehlen(${a.id})">
+       <span class="such-bez">${esc(a.bezeichnung)}${ort ? `<span class="such-ort muted"> ${esc(ort)}</span>` : ''}</span>
        <span class="such-meta muted">${a.artikelnummer ? esc(a.artikelnummer) + ' · ' : ''}Bestand: ${a.menge}</span>
-     </div>`).join('');
+     </div>`;
+  }).join('');
   box.style.display = 'block';
 }
 function sucheTaste(e) {
