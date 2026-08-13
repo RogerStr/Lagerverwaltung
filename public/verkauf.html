@@ -180,16 +180,16 @@ function render() {
 function addPos() { positionen.push({ artikel_id: null, bezeichnung: '', artikelnummer: null, menge: 1, vk_preis: 0 }); render(); scheduleSave(); }
 
 // ---------- Artikel-Schnellsuche (nur Eingabehilfe – nie im PDF) ----------
+// Gross/Kleinschreibung soll bei der Suche keine Rolle spielen (locale-bewusst für Umlaute).
+function klein(v) { return String(v ?? '').toLocaleLowerCase('de'); }
 let suchAktiv = -1; // Index des per Tastatur markierten Treffers
 function sucheKandidaten() {
-  const q = document.getElementById('artikelSuche').value.trim().toLowerCase();
-  if (!q) return [];
-  return artikelListe.filter(a =>
-    String(a.bezeichnung || '').toLowerCase().includes(q) ||
-    String(a.artikelnummer || '').toLowerCase().includes(q) ||
-    String(a.kategorie || '').toLowerCase().includes(q) ||
-    String(a.lagerort || '').toLowerCase().includes(q)
-  ).slice(0, 12);
+  const worte = klein(document.getElementById('artikelSuche').value).split(/\s+/).filter(Boolean);
+  if (!worte.length) return [];
+  return artikelListe.filter(a => {
+    const hay = klein([a.bezeichnung, a.artikelnummer, a.kategorie, a.lagerort].filter(Boolean).join(' '));
+    return worte.every(w => hay.includes(w));
+  }).slice(0, 12);
 }
 function sucheArtikel() {
   const box = document.getElementById('sucheTreffer');
