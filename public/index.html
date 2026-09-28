@@ -32,6 +32,9 @@
     <label class="muted" style="display:flex;align-items:center;gap:6px;font-size:14px;">
       <input type="checkbox" id="showEK" onchange="toggleEK()" style="width:auto"> EK anzeigen
     </label>
+    <label class="muted" style="display:flex;align-items:center;gap:6px;font-size:14px;">
+      <input type="checkbox" id="showBem" onchange="toggleBem()" style="width:auto"> Bemerkung anzeigen
+    </label>
   </div>
 
   <div class="card">
@@ -327,7 +330,7 @@ function render() {
     const frei = a.menge - reserviert;
     return `<tr class="${(leer || low) ? 'row-low' : ''}">
       <td>${bild}</td>
-      <td><strong>${esc(a.bezeichnung)}</strong>${a.bemerkung ? `<br><span class="muted" style="font-size:12px">${esc(a.bemerkung)}</span>` : ''}</td>
+      <td><strong>${esc(a.bezeichnung)}</strong>${a.bemerkung ? `<span class="col-bem"><br><span class="muted" style="font-size:12px">${esc(a.bemerkung)}</span></span>` : ''}</td>
       <td>${esc(a.artikelnummer) || '–'}</td>
       <td>${pfadAnzeige(a.kategorie)}</td>
       <td>${pfadAnzeige(a.lagerort)}</td>
@@ -382,6 +385,19 @@ function toggleEK() {
   const show = localStorage.getItem('showEK') === '1'; // Standard: ausgeblendet
   document.getElementById('showEK').checked = show;
   applyEK(show);
+})();
+
+// ---------- Bemerkung ein-/ausblenden (Zustand wird gespeichert) ----------
+function applyBem(show) { document.body.classList.toggle('hide-bem', !show); }
+function toggleBem() {
+  const show = document.getElementById('showBem').checked;
+  localStorage.setItem('showBem', show ? '1' : '0');
+  applyBem(show);
+}
+(function initBem() {
+  const show = localStorage.getItem('showBem') === '1'; // Standard: ausgeblendet
+  document.getElementById('showBem').checked = show;
+  applyBem(show);
 })();
 function findArtikel(id) { return artikelCache.find(a => a.id === id); }
 
